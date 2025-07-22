@@ -4,11 +4,8 @@ import { supabase } from "../../../../lib/supabaseClient";
 export default function EditScores({ tournament, setTournament, setPrevStandings, setActiveTab, isAdmin }) {
     const [saveMessage, setSaveMessage] = useState("");
     const [bruttoValues, setBruttoValues] = useState({});
+    const [teamHandicaps, setTeamHandicaps] = useState({});
     // const [editMode, setEditMode] = useState("total");
-
-
-    console.log("tournament.round.modes from editscore", tournament.rounds)
-
 
     useEffect(() => {
         const initialBruttos = {};
@@ -16,15 +13,39 @@ export default function EditScores({ tournament, setTournament, setPrevStandings
             tournament.rounds.forEach((round, roundIdx) => {
                 if (round.modes?.[0]?.toLowerCase() === "handicap-justerat slagspel") {
                     const netto = player.scores?.[roundIdx];
-                    const hcp = parseFloat(player.handicap);
+                    const fullHcp = parseFloat(player.handicap);
+                    const holes = round.holes ?? 18; // ← Lägg till denna
+                    const hcp = holes === 9 ? fullHcp / 2 : fullHcp;
+
                     if (!isNaN(netto) && !isNaN(hcp)) {
                         initialBruttos[`${player.id}-${roundIdx}`] = Math.round(netto + hcp);
                     }
                 }
+
+                if (round.scrambleOptions?.scrambleWithHandicap) {
+                    const teams = round.teams || [];
+                    const holes = round.holes ?? 18;
+                    const isNineHoles = holes === 9;
+
+                    teams.forEach(([id1, id2]) => {
+                        const teamLeader = tournament.playerData.find((p) => p.id === id1);
+                        const teamScore = teamLeader?.scores?.[roundIdx];
+
+                        const rawHcp =
+                            teamHandicaps[`${id1}-${id2}`] ?? teamHandicaps[`${id2}-${id1}`] ?? 0;
+
+                        const hcp = rawHcp;
+
+                        if (teamScore != null && teamScore !== 0 && !isNaN(hcp)) {
+                            initialBruttos[`${id1}-${roundIdx}`] = teamScore + hcp;
+                        }
+                    });
+                }
+
             });
         });
         setBruttoValues(initialBruttos);
-    }, [tournament]);
+    }, [tournament, teamHandicaps]);
 
     useEffect(() => {
         let anyUpdated = false;
@@ -32,12 +53,45 @@ export default function EditScores({ tournament, setTournament, setPrevStandings
 
         updatedRounds.forEach((round, idx) => {
             const isScramble = round.modes?.[0]?.toLowerCase().includes("scramble");
-            const needsGeneration = isScramble && (!round.teams || round.teams.length === 0);
+            const pairing = round.scrambleOptions?.pairing || "position";
+            const hasCustomPairs = pairing === "custom" && round.scrambleOptions?.customTeams;
+            const existingTeams = round.teams || [];
 
-            if (needsGeneration) {
-                const generated = generateTeamsForRound(round, idx, tournament.playerData, tournament);
-                updatedRounds[idx] = { ...round, teams: generated };
+            // 1. CUSTOM: generera direkt om teams saknas
+            if (isScramble && hasCustomPairs && existingTeams.length === 0) {
+                const used = new Set();
+                const customPairs = round.scrambleOptions.customTeams;
+                const customTeams = [];
+
+                for (const [p1, p2] of Object.entries(customPairs)) {
+                    if (!used.has(p1) && !used.has(p2)) {
+                        customTeams.push([p1, p2]);
+                        used.add(p1);
+                        used.add(p2);
+                    }
+                }
+
+                updatedRounds[idx] = { ...round, teams: customTeams };
                 anyUpdated = true;
+                return; // skip resten för denna runda
+            }
+
+            // 2. POSITION: vänta tills tidigare rundor spelats
+            if (
+                isScramble &&
+                pairing === "position" &&
+                existingTeams.length === 0 &&
+                idx > 0 // inte första rundan
+            ) {
+                const hasScores = tournament.playerData.some(
+                    (p) => typeof p.scores?.[idx - 1] === "number" && p.scores[idx - 1] > 0
+                );
+
+                if (hasScores) {
+                    const generated = generateTeamsForRound(round, idx, tournament.playerData, tournament);
+                    updatedRounds[idx] = { ...round, teams: generated };
+                    anyUpdated = true;
+                }
             }
         });
 
@@ -45,6 +99,38 @@ export default function EditScores({ tournament, setTournament, setPrevStandings
             setTournament({ ...tournament, rounds: updatedRounds });
         }
     }, []);
+
+
+    useEffect(() => {
+        const handicaps = {};
+
+        tournament.rounds.forEach((round, roundIdx) => {
+            if (round.scrambleOptions?.scrambleWithHandicap) {
+                const teams = round.teams || [];
+                teams.forEach(([id1, id2]) => {
+                    const p1 = tournament.playerData.find((p) => p.id === id1);
+                    const p2 = tournament.playerData.find((p) => p.id === id2);
+
+                    if (p1 && p2) {
+                        const low = Math.min(p1.handicap ?? 0, p2.handicap ?? 0);
+                        const high = Math.max(p1.handicap ?? 0, p2.handicap ?? 0);
+                        const pctLow = round.scrambleOptions.lowPct ?? 0;
+                        const pctHigh = round.scrambleOptions.highPct ?? 0;
+
+                        let hcp = low * (pctLow / 100) + high * (pctHigh / 100);
+                        const holes = round.holes ?? 18;
+                        if (holes === 9) {
+                            hcp = hcp / 2;
+                        }
+                        handicaps[`${id1}-${id2}`] = Math.round(hcp);
+                    }
+                });
+            }
+        });
+
+        setTeamHandicaps(handicaps);
+    }, [tournament]);
+
 
     const generateTeamsForRound = (round, roundIndex, players, tournament) => {
         const pairingType = round.scrambleOptions?.pairing || "position";
@@ -130,12 +216,13 @@ export default function EditScores({ tournament, setTournament, setPrevStandings
                     const teamLeaderId = team?.[0];
                     val = formData.get(`${teamLeaderId}-${roundIdx}`);
                 } else if (round.modes?.[0]?.toLowerCase() === "handicap-justerat slagspel") {
-                    const netto = formData.get(`netto-${player.id}-${roundIdx}`);
-                    val = netto ? Math.round(netto) : 0;
+                    val = formData.get(`netto-${player.id}-${roundIdx}`);
                 } else {
                     val = formData.get(`${player.id}-${roundIdx}`);
                 }
-                const score = val ? parseInt(val, 10) : 0;
+
+                const score = val !== null && val !== "" ? parseInt(val, 10) : 0;
+
 
                 updatedScores.push({
                     round_id: tournament.rounds[roundIdx].id,
@@ -279,11 +366,7 @@ export default function EditScores({ tournament, setTournament, setPrevStandings
                                                                         name={`brutto-${player.id}-${roundIdx}`}
                                                                         type="number"
                                                                         placeholder="Brutto"
-                                                                        defaultValue={
-                                                                            player.scores?.[roundIdx] != null && !isNaN(player.handicap)
-                                                                                ? Math.round(player.scores[roundIdx] + parseFloat(player.handicap))
-                                                                                : ""
-                                                                        }
+                                                                        value={bruttoValues?.[`${player.id}-${roundIdx}`] ?? ""}
                                                                         className="border rounded px-2 py-1 text-black w-20"
                                                                         onChange={(e) => {
                                                                             const val = parseInt(e.target.value, 10);
@@ -353,6 +436,7 @@ export default function EditScores({ tournament, setTournament, setPrevStandings
 
                                 {isScramble && teams.length > 0 && (
                                     <div className="overflow-x-auto border border-blue-700 rounded-lg">
+
                                         <table className="min-w-full text-sm text-left text-white">
                                             <thead className="text-xs uppercase bg-blue-800 text-gray-300">
                                                 <tr>
@@ -388,22 +472,69 @@ export default function EditScores({ tournament, setTournament, setPrevStandings
                                                         .join(" & ");
 
                                                     const teamLeaderId = team[0];
-                                                    const teamScore = tournament.playerData.find((p) => p.id === teamLeaderId)?.scores?.[roundIdx] ?? "";
+                                                    const teamScore =
+                                                        tournament.playerData.find((p) => p.id === team[0])?.scores?.[roundIdx] ??
+                                                        tournament.playerData.find((p) => p.id === team[1])?.scores?.[roundIdx] ??
+                                                        "";
 
                                                     const [p1, p2] = team.map((id) => tournament.playerData.find((p) => p.id === id));
 
                                                     return (
                                                         <tr key={`team-${teamIdx}`} className={teamIdx % 2 === 0 ? "bg-blue-700/30" : "bg-blue-900/30"}>
                                                             <td className="py-2 px-4 font-medium text-white">{teamName}</td>
+
                                                             <td className="py-2 px-4 border-r border-blue-600">
-                                                                <input
-                                                                    name={`${teamLeaderId}-${roundIdx}`}
-                                                                    type="number"
-                                                                    placeholder="Score"
-                                                                    defaultValue={teamScore}
-                                                                    className="border rounded px-2 py-1 text-black w-24"
-                                                                />
+                                                                {round.scrambleOptions?.scrambleWithHandicap ? (
+                                                                    <div className="flex items-center gap-2">
+                                                                        {/* Bruttoscore-input */}
+                                                                        <input
+                                                                            name={`brutto-${teamLeaderId}-${roundIdx}`}
+                                                                            type="number"
+                                                                            value={bruttoValues?.[`${teamLeaderId}-${roundIdx}`] ?? ""}
+                                                                            placeholder="Brutto"
+                                                                            className="border rounded px-2 py-1 text-black w-20"
+                                                                            onChange={(e) => {
+                                                                                const val = parseInt(e.target.value, 10);
+                                                                                setBruttoValues({
+                                                                                    ...bruttoValues,
+                                                                                    [`${teamLeaderId}-${roundIdx}`]: isNaN(val) ? "" : val,
+                                                                                });
+                                                                            }}
+                                                                        />
+
+                                                                        {/* Handicap badge */}
+                                                                        <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded font-semibold whitespace-nowrap">
+                                                                            –{teamHandicaps?.[`${team[0]}-${team[1]}`] ?? 0}
+                                                                        </span>
+
+                                                                        {/* Netto-input som skickas till Supabase */}
+                                                                        <input
+                                                                            name={`${teamLeaderId}-${roundIdx}`}
+                                                                            type="number"
+                                                                            readOnly
+                                                                            value={(() => {
+                                                                                const brutto = bruttoValues?.[`${teamLeaderId}-${roundIdx}`];
+                                                                                const hcp = teamHandicaps?.[`${team[0]}-${team[1]}`] ?? 0;
+                                                                                if (!isNaN(brutto) && !isNaN(hcp)) {
+                                                                                    return Math.max(0, brutto - hcp);
+                                                                                }
+                                                                                return "";
+                                                                            })()}
+                                                                            className="border rounded px-2 py-1 text-black w-20 bg-gray-100 cursor-not-allowed"
+                                                                        />
+                                                                    </div>
+                                                                ) : (
+                                                                    <input
+                                                                        name={`${teamLeaderId}-${roundIdx}`}
+                                                                        type="number"
+                                                                        placeholder="Score"
+                                                                        defaultValue={teamScore}
+                                                                        className="border rounded px-2 py-1 text-black w-24"
+                                                                    />
+                                                                )}
+
                                                             </td>
+
                                                             {tournament.miniGames?.map((miniGame, miniIdx) => (
                                                                 <>
                                                                     <td key={`${teamIdx}-${miniIdx}-p1`} className="py-2 px-2 border-l border-blue-700 text-center">

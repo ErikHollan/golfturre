@@ -17,9 +17,16 @@ export default function RoundInfo({
     const isScramble = mode.toLowerCase().includes("scramble");
     const pairingIsPosition = activeRound.scrambleOptions?.pairing === "position";
     const [showInfo, setShowInfo] = useState(false);
+    const [teamHandicaps, setTeamHandicaps] = useState({});
+    const isHandicapAdjusted = mode.toLowerCase().includes("handicap");
+    const isScrambleWithHandicap = isScramble && activeRound.scrambleOptions?.scrambleWithHandicap;
+    const isIndividualWithHandicap = !isScramble && isHandicapAdjusted;
+    const [hasManuallyChangedRound, setHasManuallyChangedRound] = useState(false);
+
 
     useEffect(() => {
         if (!players || players.length === 0 || !rounds || rounds.length === 0) return;
+        if (hasManuallyChangedRound) return; // ⛔️ Hoppa om användaren själv bläddrat
 
         let targetIndex = 0;
 
@@ -27,29 +34,45 @@ export default function RoundInfo({
             const hasScores = players.some(
                 (p) => typeof p.scores?.[i] === "number" && p.scores[i] > 0
             );
-
-            if (hasScores) {
-                targetIndex = i + 1;
-            }
+            if (hasScores) targetIndex = i + 1;
         }
 
         if (targetIndex >= rounds.length) {
-            targetIndex = rounds.length - 1; // cap at last round
+            targetIndex = rounds.length - 1;
         }
 
         setActiveRoundIndex(targetIndex);
-    }, [players, rounds, setActiveRoundIndex]);
+    }, [players, rounds, hasManuallyChangedRound, setActiveRoundIndex]);
 
 
     const generatedTeams = useMemo(() => {
+        const pairingType = activeRound.scrambleOptions?.pairing || "position";
+        const customPairs = activeRound.scrambleOptions?.customTeams || {};
 
-        if (pairingIsPosition) {
+        // 🟡 1. CUSTOM pairing – bygg teams direkt från customTeams
+        if (pairingType === "custom" && Object.keys(customPairs).length > 0) {
+            const used = new Set();
+            const teams = [];
+
+            for (const [p1, p2] of Object.entries(customPairs)) {
+                if (!used.has(p1) && !used.has(p2)) {
+                    teams.push([p1, p2]);
+                    used.add(p1);
+                    used.add(p2);
+                }
+            }
+
+            return teams;
+        }
+
+        // 🟢 2. POSITION pairing – returnera befintliga teams om de finns
+        if (pairingType === "position") {
             if (!isScramble || activeRoundIndex === 0) {
                 return activeRound.teams || [];
             }
         }
 
-
+        // 🔵 3. SCORE-based pairing (default)
         const thisRoundHasScores = players.some(
             (p) => typeof p.scores?.[activeRoundIndex] === "number" && p.scores[activeRoundIndex] > 0
         );
@@ -58,7 +81,6 @@ export default function RoundInfo({
             return activeRound.teams;
         }
 
-        const pairingType = activeRound.scrambleOptions?.pairing || "position";
         const hasTeamAssignments = tournament.team_data?.assignments &&
             Object.keys(tournament.team_data.assignments).length > 0;
 
@@ -111,7 +133,15 @@ export default function RoundInfo({
         }
 
         return grouped;
-    }, [isScramble, activeRoundIndex, players, activeRound.teams, tournament.team_data, activeRound.scrambleOptions]);
+    }, [
+        isScramble,
+        activeRoundIndex,
+        players,
+        activeRound.teams,
+        tournament.team_data,
+        activeRound.scrambleOptions,
+    ]);
+
 
 
     useEffect(() => {
@@ -157,27 +187,67 @@ export default function RoundInfo({
     useEffect(() => {
         if (!isScramble || generatedTeams.length === 0) return;
 
-        const scores = generatedTeams.map((team) => {
-            const firstPlayerId = team[0];
-            const player = players.find((p) => p.id === firstPlayerId);
-            const score = player?.scores?.[activeRoundIndex] || 0;
+        const scores = [];
+        const handicaps = {};
 
-            return { team, score };
-        });
+        for (const team of generatedTeams) {
+            const [id1, id2] = team;
+            const p1 = tournament.playerData.find((p) => p.id === id1);
+            const p2 = tournament.playerData.find((p) => p.id === id2);
+
+            // Score för tabellen
+            const score = p1?.scores?.[activeRoundIndex] ?? 0;
+            scores.push({ team, score });
+
+            // Handicap-beräkning
+            if (activeRound.scrambleOptions?.scrambleWithHandicap && p1 && p2) {
+                const low = Math.min(p1.handicap, p2.handicap);
+                const high = Math.max(p1.handicap, p2.handicap);
+
+                const pctLow = activeRound.scrambleOptions.lowPct ?? 0;
+                const pctHigh = activeRound.scrambleOptions.highPct ?? 0;
+
+                const teamHcp = Math.round(low * (pctLow / 100) + high * (pctHigh / 100));
+                handicaps[`${id1}-${id2}`] = teamHcp;
+            }
+        }
 
         setTeamScores(scores);
-    }, [generatedTeams, players, activeRoundIndex, isScramble]);
+        setTeamHandicaps(handicaps);
+    }, [generatedTeams, players, activeRoundIndex, isScramble, activeRound.scrambleOptions]);
+
 
     const handlePrev = () => {
-        if (activeRoundIndex > 0) setActiveRoundIndex(activeRoundIndex - 1);
+        if (activeRoundIndex > 0) {
+            setHasManuallyChangedRound(true); // 👈 nytt
+            setActiveRoundIndex(activeRoundIndex - 1);
+        }
     };
 
     const handleNext = () => {
-        if (activeRoundIndex < rounds.length - 1) setActiveRoundIndex(activeRoundIndex + 1);
+        if (activeRoundIndex < rounds.length - 1) {
+            setHasManuallyChangedRound(true); // 👈 nytt
+            setActiveRoundIndex(activeRoundIndex + 1);
+        }
     };
 
-    const getTeamNames = (team) =>
-        team.map((id) => players.find((p) => p.id === id)?.name || "Unknown").join(" & ");
+    const getTeamNames = (team) => {
+        const names = team.map((id) => players.find((p) => p.id === id)?.name || "Unknown");
+
+        return (
+            <span className="flex flex-col sm:flex-row sm:items-center sm:gap-1 leading-tight">
+                {/* Mobil: slash */}
+                <span className="sm:hidden text-[13px]">
+                    {names.join(" ")}
+                </span>
+
+                {/* Desktop: med & */}
+                <span className="hidden sm:inline">
+                    {names.join(" & ")}
+                </span>
+            </span>
+        );
+    };
 
     return (
         <div className="bg-blue-900/60 rounded-lg p-6 shadow text-white relative">
@@ -190,8 +260,8 @@ export default function RoundInfo({
                 >
                     ◀
                 </button>
-                <h3 className="text-lg font-bold text-yellow-300">
-                    Round {activeRoundIndex + 1}: {activeRound.name}
+                <h3 className="text-[11px] sm:text-lg font-bold text-yellow-300">
+                    Runda {activeRoundIndex + 1}: {activeRound.name}
                 </h3>
                 <button
                     onClick={handleNext}
@@ -202,21 +272,31 @@ export default function RoundInfo({
                 </button>
             </div>
 
-            <p className="text-sm mb-4">
-                <span className="text-gray-300">Game Mode:</span>{" "}
-                <span className="italic">{mode}</span>
+            <div className="text-[11px] sm:text-sm mb-4 space-y-1">
+                {/* Game mode */}
+                <div>
+                    <span className="text-gray-300">Game Mode:</span>{" "}
+                    <span className="italic">{mode}</span>
+                    {activeRound.scrambleOptions?.scrambleWithHandicap && (
+                        <span className="italic"> - hcp-justerat</span>
+                    )}
+                </div>
 
+                {/* Lagindelning */}
                 {isScramble && (
-                    <>
-                        <span className="mx-2 text-gray-500">•</span>
+                    <div>
                         <span className="text-gray-300">Lagindelning:</span>{" "}
-                        <span className="italic">{activeRound.scrambleOptions.pairing}</span>
-                        {tournament.team_mode &&
-                            <span className="italic"> inom laget</span>
-                        }
-                    </>
+                        {activeRound.scrambleOptions.pairing === "custom" ? (
+                            <span className="italic">Egen</span>
+                        ) : (
+                            <span className="italic">{activeRound.scrambleOptions.pairing}</span>
+                        )}
+                        {tournament.team_mode && (
+                            <span className="italic"> - inom laget</span>
+                        )}
+                    </div>
                 )}
-            </p>
+            </div>
 
 
             {/* ✅ Round Score Table (always shown) */}
@@ -231,52 +311,90 @@ export default function RoundInfo({
                         <thead className="uppercase text-xs text-gray-300 border-b border-gray-600">
                             <tr>
                                 <th className="py-2 px-4">{isScramble ? "Team" : "Player"}</th>
+
                                 {!isScramble &&
                                     tournament.miniGames?.map((mini, i) => (
                                         <th key={i} className="py-2 px-4 text-center">{mini.name}</th>
                                     ))}
-                                <th className="py-2 px-4 text-yellow-300 text-right">Total</th>
+
+                                {isScrambleWithHandicap && (
+                                    <th className="py-2 px-4 text-center text-gray-300">Brutto</th>
+                                )}
+                                {isIndividualWithHandicap && (
+                                    <th className="py-2 px-4 text-center text-gray-300">Brutto</th>
+                                )}
+
+                                <th className="py-2 px-4 text-yellow-300 text-right">
+                                    Total
+                                </th>
                             </tr>
                         </thead>
+
                         <tbody>
                             {isScramble
-                                ? [...teamScores]
-                                    .sort((a, b) => a.score - b.score)
-                                    .map((t, i) => (
-                                        <tr
-                                            key={i}
-                                            className={i % 2 === 0 ? "bg-blue-700/50" : "bg-blue-900/50"}
-                                        >
-                                            <td className="py-2 px-4">{getTeamNames(t.team)}</td>
-                                            <td className="py-2 px-4 pr-6 text-right">{t.score}</td>
-                                        </tr>
-                                    ))
+                                ? [...teamScores].sort((a, b) => a.score - b.score).map((t, i) => (
+                                    <tr key={i} className={i % 2 === 0 ? "bg-blue-700/50" : "bg-blue-900/50"}>
+                                        <td className="py-2 px-4 flex items-center gap-2 flex-nowrap">
+                                            {getTeamNames(t.team)}
+                                            {isScrambleWithHandicap && (
+                                                <span className="ml-2 inline-flex items-center justify-center text-[10px] sm:text-sm font-bold bg-yellow-400 text-blue-900 rounded-full min-w-[1.5rem] aspect-square">
+                                                    {teamHandicaps[`${t.team[0]}-${t.team[1]}`] ?? ""}
+                                                </span>
+
+                                            )}
+                                        </td>
+
+                                        {isScrambleWithHandicap && (
+                                            t.score ? (
+                                                <td className="py-2 px-4 text-center text-white/70">
+                                                    {t.score + (teamHandicaps[`${t.team[0]}-${t.team[1]}`] ?? 0)}
+                                                </td>
+                                            ) : (
+                                                <td className="py-2 px-4 text-center text-white/70">
+                                                    0
+                                                </td>
+                                            )
+                                        )}
+
+
+                                        <td className="py-2 px-4 text-right text-yellow-300">{t.score}</td>
+                                    </tr>
+                                ))
+
                                 : [...tournament.playerData]
-                                    .sort(
-                                        (a, b) =>
-                                            (a.scores?.[activeRoundIndex] ?? Infinity) -
-                                            (b.scores?.[activeRoundIndex] ?? Infinity)
-                                    )
+                                    .sort((a, b) => (a.scores?.[activeRoundIndex] ?? Infinity) - (b.scores?.[activeRoundIndex] ?? Infinity))
                                     .map((player, i) => (
-                                        <tr
-                                            key={player.id}
-                                            className={i % 2 === 0 ? "bg-blue-700/50" : "bg-blue-900/50"}
-                                        >
+                                        <tr key={player.id} className={i % 2 === 0 ? "bg-blue-700/50" : "bg-blue-900/50"}>
                                             <td className="py-2 px-4">{player.name}</td>
+
                                             {tournament.miniGames?.map((mini, idx) => {
-                                                const val =
-                                                    player?.miniGameScores?.[String(activeRoundIndex)]?.[mini.name] ?? 0;
+                                                const val = player?.miniGameScores?.[String(activeRoundIndex)]?.[mini.name] ?? 0;
                                                 return (
                                                     <td key={idx} className="py-2 px-4 text-center text-yellow-300">
                                                         {val > 0 ? "⭐".repeat(val) : "–"}
                                                     </td>
                                                 );
                                             })}
+
+                                            {isIndividualWithHandicap && (
+                                                typeof player.scores?.[activeRoundIndex] === "number" && player.scores[activeRoundIndex] > 0 ? (
+                                                    <td className="py-2 px-4 text-center text-white/70">
+                                                        {player.scores[activeRoundIndex] + (player.handicap ?? 0)}
+                                                    </td>
+                                                ) : (
+                                                    <td className="py-2 px-4 text-center text-white/70">
+                                                        –
+                                                    </td>
+                                                )
+                                            )}
+
+
                                             <td className="py-2 px-4 pr-6 text-right">
                                                 {player.scores?.[activeRoundIndex] ?? "-"}
                                             </td>
                                         </tr>
                                     ))}
+
                         </tbody>
                     </table>
                 </div>
@@ -291,7 +409,7 @@ export default function RoundInfo({
                             <table className="min-w-full text-sm text-left text-white">
                                 <thead className="uppercase text-xs text-gray-300 border-b border-gray-600">
                                     <tr>
-                                        <th className="py-2 px-4">Player</th>
+                                        <th className="py-2 px-4">Spelare</th>
                                         {tournament.miniGames.map((mini, idx) => (
                                             <th key={idx} className="py-2 px-4 text-center">{mini.name}</th>
                                         ))}

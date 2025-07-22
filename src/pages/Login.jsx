@@ -69,7 +69,7 @@ export default function Login() {
                 <Card className="rounded-3xl shadow-2xl bg-gradient-to-br from-[#1e293b] to-[#0f172a] border border-white/10">
                     <CardContent className="pt-10 px-10 pb-12 flex flex-col gap-6 items-center text-center">
                         <h2 className="text-3xl font-extrabold tracking-wide text-white mb-6">
-                            🔐 Logga in
+                            Logga in
                         </h2>
 
                         <input

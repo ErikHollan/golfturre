@@ -29,11 +29,14 @@ export default function StartPage() {
         <Card className="rounded-3xl shadow-2xl bg-gradient-to-br from-[#1e293b] to-[#0f172a] border border-white/10">
           <CardContent className="pt-10 px-10 pb-12 flex flex-col gap-8 items-center text-center">
             {/* Header */}
-            <div className="flex items-center gap-4 animate-pulse">
+            <div className="flex flex-col items-center animate-pulse">
               <BoltIcon className="text-yellow-400 w-10 h-10 drop-shadow-[0_0_4px_#facc15]" />
-              <h1 className="text-3xl font-extrabold tracking-wide text-white drop-shadow-[0_0_2px_#facc15]">
-                MinTurnering BETA
-              </h1>
+              <div className="flex items-center gap-4">
+
+              </div>
+              <p className="text-sm text-white opacity-80 italic mt-2 text-center">
+                Verktyget för dina golfturneringar
+              </p>
             </div>
 
             {/* Buttons */}
@@ -41,9 +44,9 @@ export default function StartPage() {
               {/* Primary Action */}
               <Button
                 onClick={() => navigate('/ny')}
-                className="w-full text-xl py-5 rounded-xl bg-green-500 hover:bg-green-400 font-bold tracking-wider shadow-lg hover:shadow-green-500/40 transition-all duration-200"
+                className="w-full text-base sm:text-lg md:text-xl py-4 sm:py-5 rounded-xl bg-green-500 hover:bg-green-400 font-bold tracking-wide sm:tracking-wider shadow-lg hover:shadow-green-500/40 transition-all duration-200"
               >
-                🎯 Skapa ny turnering
+                Skapa ny turnering
               </Button>
 
               {/* Secondary Buttons */}

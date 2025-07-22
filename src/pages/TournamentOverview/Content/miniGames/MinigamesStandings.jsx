@@ -1,10 +1,9 @@
 import React from "react";
 
-export default function MiniGamesStandings({ tournament }) {    
+export default function MiniGamesStandings({ tournament }) {
     const miniGames = tournament.miniGames || [];
     const players = tournament.playerData || [];
 
-    console.log("tournament", tournament)
 
     const playerScores = players.map((player) => {
         let total = 0;
@@ -63,42 +62,45 @@ export default function MiniGamesStandings({ tournament }) {
 
     return (
         <div className="space-y-10 mt-6">
-            {/* 🏆 Podium */}
             <div className="bg-gradient-to-r from-purple-900 to-indigo-900 p-6 rounded-lg text-white text-center">
                 <h2 className="text-2xl font-bold mb-6">🎯 Mini Game Podium</h2>
-                <div className="flex justify-center gap-4 items-end">
-                    {podium.map((player) => (
-                        <div
-                            key={player.id}
-                            className={`rounded-lg pt-4 px-4 pb-2 w-32 flex flex-col items-center shadow-lg ${getPodiumColor(player.rank)}`}
-                        >
-                            <div className="mb-2 space-y-1">
-                                {miniGames.length === 1 ? (
-                                    // Only one mini game — show just the stars once
-                                    <div className="text-yellow-700 font-bold text-base">
-                                        {"⭐".repeat(player.total) || "–"}
-                                    </div>
-                                ) : (
-                                    <>
-                                        {miniGames.map((mini) => (
-                                            <div key={mini.name} className="text-sm">
-                                                <span className="block text-xs text-black/70 font-medium">{mini.name}</span>
-                                                <span className="text-yellow-600 text-base">
-                                                    {"⭐".repeat(player.breakdown[mini.name]) || "–"}
-                                                </span>
-                                            </div>
-                                        ))}
-                                        <div className="text-yellow-700 font-bold text-base border-t border-black/10 mt-1 pt-1">
-                                            {"⭐".repeat(player.total)}
+
+                <div className="overflow-x-auto">
+                    <div className="flex justify-center gap-3 sm:gap-4 items-end w-max mx-auto px-2">
+                        {podium.map((player) => (
+                            <div
+                                key={player.id}
+                                className={`rounded-lg pt-4 px-3 pb-2 w-24 sm:w-32 flex flex-col items-center shadow-lg ${getPodiumColor(player.rank)}`}
+                            >
+                                <div className="mb-2 space-y-1">
+                                    {miniGames.length === 1 ? (
+                                        <div className="text-yellow-700 font-bold text-sm sm:text-base">
+                                            {player.total > 5 ? `⭐ x${player.total}` : "⭐".repeat(player.total) || "–"}
                                         </div>
-                                    </>
-                                )}
+                                    ) : (
+                                        <>
+                                            {miniGames.map((mini) => (
+                                                <div key={mini.name} className="text-xs sm:text-sm">
+                                                    <span className="block text-[10px] sm:text-xs text-black/70 font-medium">{mini.name}</span>
+                                                    <span className="text-yellow-600 text-sm sm:text-base">
+                                                        {player.breakdown[mini.name] > 5
+                                                            ? `⭐ x${player.breakdown[mini.name]}`
+                                                            : "⭐".repeat(player.breakdown[mini.name]) || "–"}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                            <div className="text-yellow-700 font-bold text-sm sm:text-base border-t border-black/10 mt-1 pt-1">
+                                                {player.total > 5 ? `⭐ x${player.total}` : "⭐".repeat(player.total)}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                                <div className="bg-white text-[11px] sm:text-sm text-black px-2 py-1 rounded w-full text-center mt-2 truncate">
+                                    {getMedal(player.rank)} {player.name}
+                                </div>
                             </div>
-                            <div className="bg-white text-sm text-black px-2 py-1 rounded w-full text-center mt-2">
-                                {getMedal(player.rank)} {player.name}
-                            </div>
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                 </div>
             </div>
 
