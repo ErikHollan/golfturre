@@ -16,6 +16,11 @@ export default function NewTournament({ editMode = false, tournamentData = null,
   const [miniGames, setMiniGames] = useState([]);
   const [showPreview, setShowPreview] = useState(false); //Infotext
   const [showScrambleInfo, setShowScrambleInfo] = useState(false);
+  const [showAddPlayer, setShowAddPlayer] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newHandicap, setNewHandicap] = useState("");
+  const [newClub, setNewClub] = useState("");
+
 
   const gameModes = [
     "Slagspel",
@@ -504,6 +509,41 @@ export default function NewTournament({ editMode = false, tournamentData = null,
     }
   };
 
+  const handleQuickAddPlayer = async () => {
+    if (!newName || !newHandicap) {
+      alert("Fyll i både namn och HCP");
+      return;
+    }
+
+    const newPlayer = {
+      name: newName,
+      handicap: parseFloat(newHandicap),
+      home_club: newClub,
+      user_id: user.id,
+    };
+
+    const { error, data } = await supabase
+      .from("players")
+      .insert([newPlayer])
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Fel vid skapande av spelare:", error);
+      alert("Kunde inte skapa spelare.");
+      return;
+    }
+
+    // Lägg till den direkt i listan
+    setPlayers((prev) => [...prev, data]);
+
+    // Återställ
+    setNewName("");
+    setNewHandicap("");
+    setNewClub("");
+    setShowAddPlayer(false);
+  };
+
 
   //Komponent för indelning av scramble-lag
   function CustomPairForm({ players, teamPlayers, onAddPair }) {
@@ -537,6 +577,7 @@ export default function NewTournament({ editMode = false, tournamentData = null,
         </div>
       );
     }
+
 
     return (
       <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
@@ -635,7 +676,68 @@ export default function NewTournament({ editMode = false, tournamentData = null,
                 ));
               })()}
             </div>
+
           )}
+          {/* Add player trigger */}
+          {!showAddPlayer && (
+            <button
+              onClick={() => setShowAddPlayer(true)}
+              className="mt-4 inline-flex items-center gap-2 bg-yellow-400/10 hover:bg-yellow-400/20 text-yellow-300 hover:text-yellow-200 font-medium px-4 py-2 rounded-xl text-sm shadow hover:shadow-yellow-500/20 transition-all"
+            >
+              <span>➕</span>
+              <span>Lägg till ny spelare</span>
+            </button>
+          )}
+
+          {/* Player add form */}
+          {showAddPlayer && (
+            <div className="bg-blue-900/50 p-5 mt-5 rounded-2xl border border-white/10 space-y-4 shadow-inner max-w-md">
+              <h3 className="text-lg font-semibold text-yellow-300 flex items-center gap-2">
+                ➕ Ny spelare
+              </h3>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <input
+                  type="text"
+                  placeholder="Namn"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  className="flex-1 p-3 rounded-xl bg-blue-900/30 text-white placeholder-white/50 text-sm border border-white/10 focus:ring-2 focus:ring-yellow-400"
+                />
+                <input
+                  type="number"
+                  placeholder="HCP"
+                  value={newHandicap}
+                  onChange={(e) => setNewHandicap(e.target.value)}
+                  className="w-full sm:w-24 p-3 rounded-xl bg-blue-900/30 text-white placeholder-white/50 text-sm border border-white/10 sm:text-center"
+                />
+              </div>
+
+              <input
+                type="text"
+                placeholder="Klubb"
+                value={newClub}
+                onChange={(e) => setNewClub(e.target.value)}
+                className="w-full p-3 rounded-xl bg-blue-900/30 text-white placeholder-white/50 text-sm border border-white/10 focus:ring-2 focus:ring-yellow-400"
+              />
+
+              <div className="flex gap-3 justify-end pt-1">
+                <button
+                  onClick={handleQuickAddPlayer}
+                  className="bg-green-500 hover:bg-green-400 text-white font-semibold px-5 py-2 rounded-xl text-sm shadow hover:shadow-green-500/30 transition"
+                >
+                  Spara spelare
+                </button>
+                <button
+                  onClick={() => setShowAddPlayer(false)}
+                  className="text-white/50 hover:text-white/80 text-sm font-medium"
+                >
+                  Avbryt
+                </button>
+              </div>
+            </div>
+          )}
+
 
           {/* Two-team mode toggle */}
           <div>
