@@ -16,7 +16,7 @@ export default function Header() {
     const isStartPage = location.pathname === "/";
     const tournamentMatch = matchPath("/turnering/:id", location.pathname);
     const tournamentId = tournamentMatch?.params?.id;
-
+    
     // 🔄 Fetch username
     useEffect(() => {
         const fetchUsername = async () => {
@@ -96,9 +96,7 @@ export default function Header() {
                 <h1 className="text-base sm:text-2xl font-bold text-gray-800 tracking-tight">
                     {tournamentTitle || "HoleInOne.se"}
                 </h1>
-
             </div>
-
             {/* Right: User Info */}
             <div className="w-28 flex justify-end items-center relative">
                 {user ? (

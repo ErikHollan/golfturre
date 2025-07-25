@@ -99,7 +99,7 @@ export default function TournamentPlayers({ tournament, isAdmin, setActiveTab })
                                 <img
                                     src={p.player.image_yrl}
                                     alt={p.player.name}
-                                    className="w-12 h-12 rounded-full border-2 border-yellow-400 object-cover"
+                                    className="w-12 aspect-square rounded-full border-2 border-yellow-400 object-cover"
                                 />
                             ) : (
                                 <div className="w-12 h-12 rounded-full bg-gray-500 flex items-center justify-center text-white text-sm">

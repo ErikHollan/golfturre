@@ -1,8 +1,22 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import RoundInfo from "./RoundInfo"; // make sure this path is correct
 
 export default function TournamentStandings({ prevStandings, players, rounds, tournamentModes, tournament, setTournament }) {
     const [activeRoundIndex, setActiveRoundIndex] = useState(0);
+    const [teamStandings, setTeamStandings] = useState([])
+
+    const [isStickyTotal, setIsStickyTotal] = useState(false);
+
+    useEffect(() => {
+        const updateSticky = () => {
+            const isMobile = window.innerWidth < 640 && rounds.length > 2; // Tailwind's sm breakpoint
+            setIsStickyTotal(isMobile || rounds.length >= 5);
+        };
+
+        updateSticky();
+        window.addEventListener("resize", updateSticky);
+        return () => window.removeEventListener("resize", updateSticky);
+    }, [rounds.length]);
 
     const getTotalWithDeduction = (player) => {
         const rawTotal = player.scores.reduce((sum, val) => sum + (val || 0), 0);
@@ -35,32 +49,43 @@ export default function TournamentStandings({ prevStandings, players, rounds, to
     );
 
     const podium = sortedPlayers.slice(0, 3);
-    const activeRound = tournament.rounds[activeRoundIndex];
+    const activeRound = tournament.rounds
+    [activeRoundIndex];
 
-    const teamStandings = ["red", "green"]
-        .map((teamKey) => {
-            const teamPlayers = tournament.playerData.filter(
-                (p) => tournament.team_data.assignments[p.id] === teamKey
-            );
 
-            const total = teamPlayers.reduce(
-                (sum, p) => sum + getTotalWithDeduction(p),
-                0
-            );
 
-            return {
-                key: teamKey,
-                name:
-                    tournament.team_data?.captains?.[teamKey] ||
-                    (teamKey === "red" ? "Röd" : "Grön"),
-                color:
-                    tournament.team_data?.colors?.[teamKey] ||
-                    (teamKey === "red" ? "#DC2626" : "#059669"),
-                total,
-            };
-        })
-        .sort((a, b) => a.total - b.total); // sortera stigande
 
+    useEffect(() => {
+        if (tournament.team_mode && tournament.playerData && tournament.team_data?.assignments) {
+            const standings = ["red", "green"]
+                .map((teamKey) => {
+                    const teamPlayers = tournament.playerData.filter(
+                        (p) => tournament.team_data.assignments[p.id] === teamKey
+                    );
+
+                    const total = teamPlayers.reduce(
+                        (sum, p) => sum + getTotalWithDeduction(p),
+                        0
+                    );
+
+                    return {
+                        key: teamKey,
+                        name:
+                            tournament.team_data?.captains?.[teamKey] ||
+                            (teamKey === "red" ? "Röd" : "Grön"),
+                        color:
+                            tournament.team_data?.colors?.[teamKey] ||
+                            (teamKey === "red" ? "#DC2626" : "#059669"),
+                        total,
+                    };
+                })
+                .sort((a, b) => a.total - b.total); // stigande
+
+            setTeamStandings(standings);
+        } else {
+            setTeamStandings([]);
+        }
+    }, [tournament]); // ✅ körs när turneringen laddats eller ändrats
 
     return (
         <div className="mt-6 space-y-10">
@@ -140,8 +165,8 @@ export default function TournamentStandings({ prevStandings, players, rounds, to
                     <table className="min-w-full text-sm text-left text-white">
                         <thead className="uppercase text-xs text-gray-300 border-b border-gray-600">
                             <tr>
-                                <th className="py-2 px-4">#</th>
-                                <th className="py-2 px-4">Spelare</th>
+                                <th className="py-2 px-2 w-6 sm:w-auto">#</th>
+                                <th className="py-2 px-2 sm:px-4">Spelare</th>
                                 {rounds.map((round, idx) => (
                                     <th key={idx} className="py-2 px-4">
                                         {/* Visa bara round number på mobil, full text på sm+ */}
@@ -152,7 +177,13 @@ export default function TournamentStandings({ prevStandings, players, rounds, to
                                 {tournament.miniGames?.some((m) => m.subtract_from_score) && (
                                     <th className="py-2 px-4 text-center min-w-[50px]">⭐</th>
                                 )}
-                                <th className="py-2 px-4 text-yellow-300">Total</th>
+                                <th
+                                    className={`py-2 px-4 text-yellow-300 text-center ${isStickyTotal ? "sticky right-0 bg-blue-800 z-10" : ""
+                                        }`}
+                                >
+                                    Total
+                                </th>
+
                             </tr>
                             <tr className="text-[10px] font-normal text-gray-400 leading-tight -mt-1">
                                 <td className="pt-0 pb-1 px-4"></td>
@@ -199,8 +230,8 @@ export default function TournamentStandings({ prevStandings, players, rounds, to
                                         key={player.id}
                                         className={index % 2 === 0 ? "bg-blue-700/50" : "bg-blue-900/50"}
                                     >
-                                        <td className="py-2 px-4">{index + 1}</td>
-                                        <td className="py-2 px-4 font-medium flex items-center gap-2">
+                                        <td className="py-2 px-2 w-6 sm:w-auto">{index + 1}</td>
+                                        <td className="py-2 px-2 sm:px-4 font-medium flex items-center gap-1 sm:gap-2">
                                             {tournament.team_mode && tournament.team_data?.assignments?.[player.id] && (
                                                 <span
                                                     className="inline-block w-2.5 h-2.5 rounded-full"
@@ -232,7 +263,13 @@ export default function TournamentStandings({ prevStandings, players, rounds, to
                                             <td className="py-2 px-4 text-green-300 font-bold whitespace-nowrap min-w-[60px] text-center">–{deduction}</td>
 
                                         )}
-                                        <td className="py-2 px-4 font-bold text-yellow-300">{total}</td>
+                                        <td
+                                            className={`py-2 px-4 font-bold text-yellow-300 text-center ${isStickyTotal ? "sticky right-0 bg-blue-900" : ""
+                                                }`}
+                                        >
+                                            {total}
+                                        </td>
+
                                     </tr>
                                 );
                             })}

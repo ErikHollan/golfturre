@@ -416,7 +416,6 @@ export default function NewTournament({ editMode = false, tournamentData = null,
   };
 
   const clearOldTournamentData = async (tournamentId) => {
-    console.log("RUNNING CLEAROLDTOURNAMENTDATA")
 
     const deleteTables = [
       "tournament_players",
@@ -475,7 +474,6 @@ export default function NewTournament({ editMode = false, tournamentData = null,
       return;
     }
 
-    console.log("🔍 Valda spelare vid sparande:", selectedPlayerIds);
     if (selectedPlayerIds.length === 0) {
       alert("Vänligen välj spelare")
       return;

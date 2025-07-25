@@ -31,11 +31,16 @@ export default function StartPage() {
 
             {/* Logo + Headline */}
             <div className="flex flex-col items-center gap-2">
-              <BoltIcon className="text-yellow-400 w-10 h-10 drop-shadow-[0_0_4px_#facc15]" />
-              <p className="text-white/70 text-sm sm:text-base max-w-xs mt-1 leading-snug">
+              <img
+                src="https://yswafknmqpwjrsxjslbu.supabase.co/storage/v1/object/public/logos//logosmall.png"
+                alt="Logo"
+                className="w-12 h-12  brightness-125"
+              />
+              <p className="text-white/70 text-sm sm:text-base max-w-xs mt-1 leading-snug text-center">
                 Skapa, hantera och följ turneringar.
               </p>
             </div>
+
 
             {/* Action Buttons */}
             <div className="flex flex-col gap-4 w-full text-white mt-2">

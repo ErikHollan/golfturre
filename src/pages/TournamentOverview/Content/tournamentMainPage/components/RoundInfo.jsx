@@ -85,21 +85,27 @@ export default function RoundInfo({
             Object.keys(tournament.team_data.assignments).length > 0;
 
         const pairBy = (group, key = "total") => {
-            const sorted = [...group].sort((a, b) => (a[key] ?? 0) - (b[key] ?? 0));
+            const sorted = [...group].sort((a, b) => {
+                const aVal = a[key] ?? Infinity;
+                const bVal = b[key] ?? Infinity;
+                return aVal - bVal;
+            });
+
             const teams = [];
-            let left = 0,
-                right = sorted.length - 1;
+            let left = 0;
+            let right = sorted.length - 1;
 
             while (left < right) {
                 teams.push([sorted[left++].id, sorted[right--].id]);
             }
 
             if (left === right) {
-                teams.push([sorted[left].id]);
+                teams.push([sorted[left].id]); // ensam spelare
             }
 
             return teams;
         };
+
 
         let grouped = [];
 
@@ -127,6 +133,7 @@ export default function RoundInfo({
             const withData = players.map((p) => ({
                 ...p,
                 total: p.scores.slice(0, activeRoundIndex).reduce((sum, s) => sum + (s || 0), 0),
+                handicap: typeof p.handicap === "number" ? p.handicap : 999, // fallback
             }));
 
             grouped = pairBy(withData, pairingType === "handicap" ? "handicap" : "total");
@@ -169,8 +176,6 @@ export default function RoundInfo({
                 .then(({ error }) => {
                     if (error) {
                         console.error("❌ Failed to save generated teams to Supabase", error);
-                    } else {
-                        console.log("✅ Saved generated teams to Supabase");
                     }
                 });
         }
@@ -236,9 +241,11 @@ export default function RoundInfo({
 
         return (
             <span className="flex flex-col sm:flex-row sm:items-center sm:gap-1 leading-tight">
-                {/* Mobil: slash */}
-                <span className="sm:hidden text-[13px]">
-                    {names.join(" ")}
+                {/* Mobil: varje namn på egen rad */}
+                <span className="sm:hidden flex flex-col text-[13px]">
+                    {names.map((name, i) => (
+                        <span key={i}>{name}</span>
+                    ))}
                 </span>
 
                 {/* Desktop: med & */}
